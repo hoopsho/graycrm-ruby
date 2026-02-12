@@ -69,4 +69,74 @@ class GrayCRM::ContactTest < Minitest::Test
     email = contact.emails.create(email: "new@example.com", label: "home")
     assert_equal "new@example.com", email.email
   end
+
+  # --- Nested resource path context tests ---
+
+  def test_nested_flag_retains_base_path
+    stub_api(:get, "/contacts/abc/flags", body: {
+      data: [{ id: "f1", key: "enrichment", value: "pending" }],
+      pagination: {}
+    })
+
+    contact = GrayCRM::Contact.new("id" => "abc")
+    flag = contact.flags.to_a.first
+    assert_equal "/contacts/abc/flags", flag._base_path
+  end
+
+  def test_nested_flag_claim_uses_nested_path
+    stub_api(:get, "/contacts/abc/flags", body: {
+      data: [{ id: "f1", key: "enrichment", value: "pending" }],
+      pagination: {}
+    })
+    claim_stub = stub_request(:post, "https://acme.graycrm.io/api/v1/contacts/abc/flags/f1/claim")
+      .to_return(status: 200, body: {}.to_json, headers: { "Content-Type" => "application/json" })
+    stub_request(:get, "https://acme.graycrm.io/api/v1/contacts/abc/flags/f1")
+      .to_return(status: 200, body: { data: { id: "f1", key: "enrichment", value: "claimed" } }.to_json,
+                 headers: { "Content-Type" => "application/json" })
+
+    contact = GrayCRM::Contact.new("id" => "abc")
+    flag = contact.flags.to_a.first
+    flag.claim!
+    assert_requested(claim_stub)
+    assert_equal "claimed", flag.value
+  end
+
+  def test_nested_flag_update_uses_nested_path
+    stub_api(:get, "/contacts/abc/flags", body: {
+      data: [{ id: "f1", key: "enrichment", value: "pending" }],
+      pagination: {}
+    })
+    patch_stub = stub_request(:patch, "https://acme.graycrm.io/api/v1/contacts/abc/flags/f1")
+      .to_return(status: 200, body: { data: { id: "f1", key: "enrichment", value: "completed" } }.to_json,
+                 headers: { "Content-Type" => "application/json" })
+
+    contact = GrayCRM::Contact.new("id" => "abc")
+    flag = contact.flags.to_a.first
+    flag.update(value: "completed")
+    assert_requested(patch_stub)
+  end
+
+  def test_nested_flag_destroy_uses_nested_path
+    stub_api(:get, "/contacts/abc/flags", body: {
+      data: [{ id: "f1", key: "enrichment", value: "pending" }],
+      pagination: {}
+    })
+    delete_stub = stub_request(:delete, "https://acme.graycrm.io/api/v1/contacts/abc/flags/f1")
+      .to_return(status: 204, body: "", headers: { "Content-Type" => "application/json" })
+
+    contact = GrayCRM::Contact.new("id" => "abc")
+    flag = contact.flags.to_a.first
+    flag.destroy
+    assert_requested(delete_stub)
+  end
+
+  def test_created_nested_email_retains_base_path
+    stub_api(:post, "/contacts/abc/contact_emails", status: 201, body: {
+      data: { id: "e2", email: "new@example.com", label: "home" }
+    })
+
+    contact = GrayCRM::Contact.new("id" => "abc")
+    email = contact.emails.create(email: "new@example.com", label: "home")
+    assert_equal "/contacts/abc/contact_emails", email._base_path
+  end
 end

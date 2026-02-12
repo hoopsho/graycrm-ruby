@@ -8,7 +8,7 @@ module GrayCRM
               :consecutive_failures, :created_at, :updated_at
 
     def test!
-      GrayCRM.client.post("#{self.class.resource_path}/#{id}/test")
+      GrayCRM.client.post("#{instance_path}/test")
       true
     end
   end

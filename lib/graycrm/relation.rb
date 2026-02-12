@@ -14,19 +14,31 @@ module GrayCRM
     end
 
     def where(filters = {})
-      dup.tap { |r| r.instance_variable_get(:@filters).merge!(filters) }
+      dup.tap do |r|
+        r.instance_variable_set(:@filters, @filters.merge(filters))
+        r.instance_variable_set(:@collection, nil)
+      end
     end
 
     def page(num)
-      dup.tap { |r| r.instance_variable_set(:@page_num, num) }
+      dup.tap do |r|
+        r.instance_variable_set(:@page_num, num)
+        r.instance_variable_set(:@collection, nil)
+      end
     end
 
     def per(num)
-      dup.tap { |r| r.instance_variable_set(:@per_num, num) }
+      dup.tap do |r|
+        r.instance_variable_set(:@per_num, num)
+        r.instance_variable_set(:@collection, nil)
+      end
     end
 
     def cursor(token)
-      dup.tap { |r| r.instance_variable_set(:@cursor_token, token) }
+      dup.tap do |r|
+        r.instance_variable_set(:@cursor_token, token)
+        r.instance_variable_set(:@collection, nil)
+      end
     end
 
     def each(&block)
@@ -65,7 +77,7 @@ module GrayCRM
     def fetch
       params = build_params
       response = GrayCRM.client.get(@path, params: params)
-      Collection.from_response(response, @klass)
+      Collection.from_response(response, @klass, path: @path, params: params)
     end
 
     def build_params
@@ -97,8 +109,21 @@ module GrayCRM
   end
 
   class NestedRelation < Relation
-    def initialize(klass, path)
-      super(klass, path)
+    def create(attrs = {})
+      resource_key = @klass.resource_name
+      response = GrayCRM.client.post(@path, body: { resource_key => attrs })
+      data = response.is_a?(Hash) && response["data"] ? response["data"] : response
+      instance = @klass.new(data)
+      instance._base_path = @path
+      instance
+    end
+
+    private
+
+    def fetch
+      params = build_params
+      response = GrayCRM.client.get(@path, params: params)
+      Collection.from_response(response, @klass, path: @path, params: params, base_path: @path)
     end
   end
 end

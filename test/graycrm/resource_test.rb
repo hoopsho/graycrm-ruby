@@ -27,6 +27,24 @@ class GrayCRM::ResourceTest < Minitest::Test
     assert contact.persisted?
   end
 
+  def test_create_returns_nil_on_validation_error
+    stub_api(:post, "/contacts", status: 422, body: {
+      error: { code: "validation_failed", message: "Invalid", details: { first_name: ["can't be blank"] } }
+    })
+
+    result = GrayCRM::Contact.create(first_name: "")
+    assert_nil result
+  end
+
+  def test_create_bang_raises_on_validation_error
+    stub_api(:post, "/contacts", status: 422, body: {
+      error: { code: "validation_failed", message: "Invalid", details: { first_name: ["can't be blank"] } }
+    })
+
+    error = assert_raises(GrayCRM::ValidationError) { GrayCRM::Contact.create!(first_name: "") }
+    assert_equal({ "first_name" => ["can't be blank"] }, error.validation_errors)
+  end
+
   def test_update_patches_resource
     stub_api(:get, "/contacts/abc", body: {
       data: { id: "abc", first_name: "Jane" }
@@ -80,5 +98,50 @@ class GrayCRM::ResourceTest < Minitest::Test
     contact = GrayCRM::Contact.new("id" => "abc", "first_name" => "Jane", "last_name" => "Old")
     contact.reload
     assert_equal "Updated", contact.last_name
+  end
+
+  def test_save_new_record
+    stub_api(:post, "/contacts", status: 201, body: {
+      data: { id: "new-2", first_name: "Alice" }
+    })
+
+    contact = GrayCRM::Contact.new("first_name" => "Alice")
+    assert contact.new_record?
+    result = contact.save
+    assert_equal contact, result
+    assert_equal "new-2", contact.id
+    assert contact.persisted?
+  end
+
+  def test_save_returns_false_on_validation_error
+    stub_api(:patch, "/contacts/abc", status: 422, body: {
+      error: { code: "validation_failed", message: "Invalid", details: { first_name: ["can't be blank"] } }
+    })
+
+    contact = GrayCRM::Contact.new("id" => "abc", "first_name" => "Jane")
+    contact.first_name = ""
+    result = contact.save
+    assert_equal false, result
+  end
+
+  def test_save_bang_raises_with_original_error_details
+    stub_api(:patch, "/contacts/abc", status: 422, body: {
+      error: { code: "validation_failed", message: "Invalid", details: { first_name: ["can't be blank"] } }
+    })
+
+    contact = GrayCRM::Contact.new("id" => "abc", "first_name" => "Jane")
+    contact.first_name = ""
+    error = assert_raises(GrayCRM::ValidationError) { contact.save! }
+    assert_equal({ "first_name" => ["can't be blank"] }, error.validation_errors)
+  end
+
+  def test_update_bang_raises_with_original_error_details
+    stub_api(:patch, "/contacts/abc", status: 422, body: {
+      error: { code: "validation_failed", message: "Invalid", details: { company: ["too long"] } }
+    })
+
+    contact = GrayCRM::Contact.new("id" => "abc")
+    error = assert_raises(GrayCRM::ValidationError) { contact.update!(company: "x" * 300) }
+    assert_equal({ "company" => ["too long"] }, error.validation_errors)
   end
 end

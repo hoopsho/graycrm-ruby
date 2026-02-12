@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require 'set'
+
 module GrayCRM
   class Resource
     class << self
@@ -12,7 +14,7 @@ module GrayCRM
 
         names.each do |name|
           define_method(name) { @attributes[name.to_s] }
-          define_method(:"#{name}=") { |v| @attributes[name.to_s] = v; @changed_attributes << name.to_s }
+          define_method(:"#{name}=") { |v| @attributes[name.to_s] = v; @changed_attributes.add(name.to_s) }
         end
       end
 
@@ -62,10 +64,15 @@ module GrayCRM
         response = GrayCRM.client.post(resource_path, body: { resource_key => attrs })
         data = response.is_a?(Hash) && response["data"] ? response["data"] : response
         new(data)
+      rescue ValidationError
+        nil
       end
 
       def create!(attrs = {})
-        create(attrs)
+        resource_key = resource_name
+        response = GrayCRM.client.post(resource_path, body: { resource_key => attrs })
+        data = response.is_a?(Hash) && response["data"] ? response["data"] : response
+        new(data)
       end
 
       def resource_name
@@ -74,10 +81,12 @@ module GrayCRM
     end
 
     attr_reader :attributes
+    attr_accessor :_base_path
 
     def initialize(attrs = {})
       @attributes = {}
-      @changed_attributes = []
+      @changed_attributes = Set.new
+      @_base_path = nil
       attrs.each { |k, v| @attributes[k.to_s] = v }
     end
 
@@ -98,46 +107,37 @@ module GrayCRM
     end
 
     def save
-      if persisted?
-        body = { self.class.resource_name => changed_hash }
-        response = GrayCRM.client.patch("#{self.class.resource_path}/#{id}", body: body)
-        data = response.is_a?(Hash) && response["data"] ? response["data"] : response
-        @attributes.merge!(data)
-      else
-        body = { self.class.resource_name => @attributes }
-        response = GrayCRM.client.post(self.class.resource_path, body: body)
-        data = response.is_a?(Hash) && response["data"] ? response["data"] : response
-        @attributes.merge!(data)
-      end
+      perform_save
       @changed_attributes.clear
       self
-    rescue ValidationError
+    rescue ValidationError => e
+      @_last_validation_error = e
       false
     end
 
     def save!
-      result = save
-      raise GrayCRM::ValidationError, "Save failed" if result == false
+      perform_save
+      @changed_attributes.clear
       self
     end
 
     def update(attrs = {})
-      attrs.each { |k, v| @attributes[k.to_s] = v; @changed_attributes << k.to_s }
+      attrs.each { |k, v| @attributes[k.to_s] = v; @changed_attributes.add(k.to_s) }
       save
     end
 
     def update!(attrs = {})
-      attrs.each { |k, v| @attributes[k.to_s] = v; @changed_attributes << k.to_s }
+      attrs.each { |k, v| @attributes[k.to_s] = v; @changed_attributes.add(k.to_s) }
       save!
     end
 
     def destroy
-      GrayCRM.client.delete("#{self.class.resource_path}/#{id}")
+      GrayCRM.client.delete(instance_path)
       true
     end
 
     def reload
-      response = GrayCRM.client.get("#{self.class.resource_path}/#{id}")
+      response = GrayCRM.client.get(instance_path)
       data = response.is_a?(Hash) && response["data"] ? response["data"] : response
       @attributes = data
       @changed_attributes.clear
@@ -157,6 +157,23 @@ module GrayCRM
     end
 
     private
+
+    def perform_save
+      if persisted?
+        body = { self.class.resource_name => changed_hash }
+        response = GrayCRM.client.patch(instance_path, body: body)
+      else
+        body = { self.class.resource_name => @attributes }
+        path = @_base_path || self.class.resource_path
+        response = GrayCRM.client.post(path, body: body)
+      end
+      data = response.is_a?(Hash) && response["data"] ? response["data"] : response
+      @attributes.merge!(data)
+    end
+
+    def instance_path
+      "#{@_base_path || self.class.resource_path}/#{id}"
+    end
 
     def changed_hash
       @changed_attributes.each_with_object({}) { |k, h| h[k] = @attributes[k] }

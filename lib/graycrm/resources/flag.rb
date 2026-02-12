@@ -8,10 +8,7 @@ module GrayCRM
               :flaggable_type, :flaggable_id, :created_at, :updated_at
 
     def claim!
-      # Expects to be accessed via nested path: /contacts/:id/flags/:id/claim
-      # The caller must provide the full path context
-      path = "#{self.class.resource_path}/#{id}/claim"
-      GrayCRM.client.post(path)
+      GrayCRM.client.post("#{instance_path}/claim")
       reload
     end
   end

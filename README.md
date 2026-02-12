@@ -228,6 +228,26 @@ while collection.has_more?
 end
 ```
 
+### Auto-Pagination
+
+Use `next_page` to fetch the next page, or `each_page` to iterate all pages automatically:
+
+```ruby
+# Manual page-by-page
+page = GrayCRM::Contact.cursor(nil).per(100).collection
+while page
+  page.each { |c| process(c) }
+  page = page.next_page
+end
+
+# Block iteration
+GrayCRM::Contact.page(1).per(50).collection.each_page do |page|
+  page.each { |contact| process(contact) }
+end
+
+# Works with both cursor and offset pagination
+```
+
 ## Error Handling
 
 ```ruby

@@ -66,5 +66,82 @@ class GrayCRM::RelationTest < Minitest::Test
     filtered = base.where(company_eq: "Acme")
 
     refute_equal base.object_id, filtered.object_id
+
+    base_filters = base.instance_variable_get(:@filters)
+    filtered_filters = filtered.instance_variable_get(:@filters)
+
+    assert_equal({ first_name_cont: "Jane" }, base_filters)
+    assert_equal({ first_name_cont: "Jane", company_eq: "Acme" }, filtered_filters)
+    refute_equal base_filters.object_id, filtered_filters.object_id
+  end
+
+  # --- Auto-pagination tests ---
+
+  def test_next_page_with_cursor
+    stub_api_with_query(:get, "/contacts",
+      query: { "cursor" => "page1" },
+      body: { data: [{ id: "1" }], pagination: { next_cursor: "page2", has_more: true } })
+
+    stub_api_with_query(:get, "/contacts",
+      query: { "cursor" => "page2" },
+      body: { data: [{ id: "2" }], pagination: { next_cursor: nil, has_more: false } })
+
+    page1 = GrayCRM::Contact.cursor("page1").collection
+    assert_equal %w[1], page1.map(&:id)
+    assert page1.has_more?
+
+    page2 = page1.next_page
+    assert_equal %w[2], page2.map(&:id)
+    refute page2.has_more?
+
+    assert_nil page2.next_page
+  end
+
+  def test_next_page_with_offset
+    stub_api_with_query(:get, "/contacts",
+      query: { "page" => "1", "per_page" => "2" },
+      body: { data: [{ id: "1" }, { id: "2" }], pagination: { page: 1, per_page: 2, total: 4, total_pages: 2 } })
+
+    stub_api_with_query(:get, "/contacts",
+      query: { "page" => "2", "per_page" => "2" },
+      body: { data: [{ id: "3" }, { id: "4" }], pagination: { page: 2, per_page: 2, total: 4, total_pages: 2 } })
+
+    page1 = GrayCRM::Contact.page(1).per(2).collection
+    assert_equal %w[1 2], page1.map(&:id)
+
+    page2 = page1.next_page
+    assert_equal %w[3 4], page2.map(&:id)
+
+    assert_nil page2.next_page
+  end
+
+  def test_each_page_iterates_all_pages
+    stub_api_with_query(:get, "/contacts",
+      query: { "cursor" => "start" },
+      body: { data: [{ id: "1" }], pagination: { next_cursor: "mid", has_more: true } })
+
+    stub_api_with_query(:get, "/contacts",
+      query: { "cursor" => "mid" },
+      body: { data: [{ id: "2" }], pagination: { next_cursor: "end", has_more: true } })
+
+    stub_api_with_query(:get, "/contacts",
+      query: { "cursor" => "end" },
+      body: { data: [{ id: "3" }], pagination: { next_cursor: nil, has_more: false } })
+
+    all_ids = []
+    GrayCRM::Contact.cursor("start").collection.each_page do |page|
+      all_ids.concat(page.map(&:id))
+    end
+
+    assert_equal %w[1 2 3], all_ids
+  end
+
+  def test_each_page_returns_enumerator
+    stub_api_with_query(:get, "/contacts",
+      query: { "cursor" => "only" },
+      body: { data: [{ id: "1" }], pagination: { next_cursor: nil, has_more: false } })
+
+    enum = GrayCRM::Contact.cursor("only").collection.each_page
+    assert_kind_of Enumerator, enum
   end
 end
