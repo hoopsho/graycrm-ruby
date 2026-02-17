@@ -15,7 +15,7 @@ class GrayCRM::RelationTest < Minitest::Test
   end
 
   def test_page_and_per
-    stub = stub_api_with_query(:get, "/contacts",
+    stub_api_with_query(:get, "/contacts",
       query: { "page" => "2", "per_page" => "10" },
       body: { data: [], pagination: { page: 2, per_page: 10, total: 50, total_pages: 5 } })
 
@@ -25,7 +25,7 @@ class GrayCRM::RelationTest < Minitest::Test
   end
 
   def test_cursor_pagination
-    stub = stub_api_with_query(:get, "/contacts",
+    stub_api_with_query(:get, "/contacts",
       query: { "cursor" => "abc123" },
       body: { data: [{ id: "1" }], pagination: { next_cursor: "def456", has_more: true } })
 

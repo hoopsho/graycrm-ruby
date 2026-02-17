@@ -44,13 +44,13 @@ module GrayCRM
     # Thread-safe per-request configuration for multi-tenant apps
     def with_config(api_key: nil, host: nil, **overrides)
       config = Configuration.new
-      config.host = host || configuration.host
-      config.api_key = api_key || configuration.api_key
-      config.timeout = overrides[:timeout] || configuration.timeout
-      config.open_timeout = overrides[:open_timeout] || configuration.open_timeout
+      config.host = overrides.key?(:host) ? overrides[:host] : (host || configuration.host)
+      config.api_key = overrides.key?(:api_key) ? overrides[:api_key] : (api_key || configuration.api_key)
+      config.timeout = overrides.key?(:timeout) ? overrides[:timeout] : configuration.timeout
+      config.open_timeout = overrides.key?(:open_timeout) ? overrides[:open_timeout] : configuration.open_timeout
       config.logger = overrides.key?(:logger) ? overrides[:logger] : configuration.logger
-      config.per_page = overrides[:per_page] || configuration.per_page
-      config.max_retries = overrides[:max_retries] || configuration.max_retries
+      config.per_page = overrides.key?(:per_page) ? overrides[:per_page] : configuration.per_page
+      config.max_retries = overrides.key?(:max_retries) ? overrides[:max_retries] : configuration.max_retries
 
       Thread.current[:graycrm_config] = config
       yield

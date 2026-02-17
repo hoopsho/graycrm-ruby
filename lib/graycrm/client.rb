@@ -85,7 +85,7 @@ module GrayCRM
     end
 
     def build_http(uri)
-      key = "#{uri.host}:#{uri.port}"
+      key = "#{uri.host}:#{uri.port}:#{@config.timeout}:#{@config.open_timeout}"
       cache = Thread.current[:graycrm_http_cache] ||= {}
       http = cache[key]
 
