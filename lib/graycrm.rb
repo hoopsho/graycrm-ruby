@@ -50,6 +50,7 @@ module GrayCRM
       config.open_timeout = overrides[:open_timeout] || configuration.open_timeout
       config.logger = overrides.key?(:logger) ? overrides[:logger] : configuration.logger
       config.per_page = overrides[:per_page] || configuration.per_page
+      config.max_retries = overrides[:max_retries] || configuration.max_retries
 
       Thread.current[:graycrm_config] = config
       yield
@@ -60,6 +61,7 @@ module GrayCRM
     def reset!
       @configuration = Configuration.new
       Thread.current[:graycrm_config] = nil
+      Thread.current[:graycrm_http_cache] = nil
     end
   end
 end

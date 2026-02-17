@@ -101,7 +101,7 @@ module GrayCRM
       end
 
       params[:page] = @page_num if @page_num
-      params[:per_page] = @per_num || GrayCRM.configuration.per_page
+      params[:per_page] = @per_num if @per_num
       params[:cursor] = @cursor_token if @cursor_token
 
       params

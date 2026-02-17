@@ -108,4 +108,92 @@ class GrayCRM::ClientTest < Minitest::Test
     GrayCRM.client.post("/contacts", body: { contact: {} }, headers: { "Idempotency-Key" => "unique-123" })
     assert_requested(stub)
   end
+
+  # --- rate limit auto-retry ---
+
+  def test_rate_limit_retry_succeeds_after_retry
+    # First call returns 429, second call succeeds
+    call_count = 0
+    stub_request(:get, /contacts/)
+      .to_return do |_request|
+        call_count += 1
+        if call_count == 1
+          {
+            status: 429,
+            body: { error: { code: "rate_limit_exceeded", message: "Too fast" } }.to_json,
+            headers: { "Content-Type" => "application/json", "Retry-After" => "0" }
+          }
+        else
+          {
+            status: 200,
+            body: { data: [{ id: "1" }] }.to_json,
+            headers: { "Content-Type" => "application/json" }
+          }
+        end
+      end
+
+    GrayCRM.configuration.max_retries = 1
+    result = GrayCRM.client.get("/contacts")
+    assert_equal [{ "id" => "1" }], result["data"]
+    assert_equal 2, call_count
+  ensure
+    GrayCRM.configuration.max_retries = 0
+  end
+
+  def test_rate_limit_raises_after_max_retries_exhausted
+    stub_api(:get, "/contacts", status: 429,
+      body: { error: { code: "rate_limit_exceeded", message: "Too fast" } },
+      headers: { "Retry-After" => "0" })
+
+    GrayCRM.configuration.max_retries = 1
+    # Should raise after 1 retry (2 total attempts)
+    assert_raises(GrayCRM::RateLimitError) { GrayCRM.client.get("/contacts") }
+  ensure
+    GrayCRM.configuration.max_retries = 0
+  end
+
+  def test_rate_limit_no_retry_when_max_retries_zero
+    call_count = 0
+    stub_request(:get, /contacts/)
+      .to_return do |_request|
+        call_count += 1
+        {
+          status: 429,
+          body: { error: { code: "rate_limit_exceeded", message: "Too fast" } }.to_json,
+          headers: { "Content-Type" => "application/json", "Retry-After" => "0" }
+        }
+      end
+
+    assert_raises(GrayCRM::RateLimitError) { GrayCRM.client.get("/contacts") }
+    assert_equal 1, call_count
+  end
+
+  # --- connection reuse ---
+
+  def test_build_http_reuses_connection_for_same_host
+    Thread.current[:graycrm_http_cache] = nil
+    client = GrayCRM.client
+    uri = URI.parse("https://acme.graycrm.io/api/v1/contacts")
+
+    http1 = client.send(:build_http, uri)
+    http2 = client.send(:build_http, uri)
+
+    assert_same http1, http2
+  ensure
+    Thread.current[:graycrm_http_cache] = nil
+  end
+
+  def test_build_http_creates_new_connection_for_different_host
+    Thread.current[:graycrm_http_cache] = nil
+    client = GrayCRM.client
+    uri1 = URI.parse("https://acme.graycrm.io/api/v1/contacts")
+    uri2 = URI.parse("https://other.graycrm.io/api/v1/contacts")
+
+    http1 = client.send(:build_http, uri1)
+    http2 = client.send(:build_http, uri2)
+
+    refute_same http1, http2
+  ensure
+    Thread.current[:graycrm_http_cache] = nil
+  end
 end

@@ -65,18 +65,39 @@ module GrayCRM
       set_headers(request, extra_headers)
       log_request(request)
 
-      http = build_http(uri)
-      response = http.request(request)
+      retries = 0
 
-      log_response(response)
-      handle_response(response)
+      begin
+        http = build_http(uri)
+        response = http.request(request)
+
+        log_response(response)
+        handle_response(response)
+      rescue RateLimitError => e
+        if retries < @config.max_retries
+          retries += 1
+          sleep_seconds = e.retry_after || 1
+          sleep(sleep_seconds)
+          retry
+        end
+        raise
+      end
     end
 
     def build_http(uri)
-      http = Net::HTTP.new(uri.host, uri.port)
-      http.use_ssl = true
-      http.read_timeout = @config.timeout
-      http.open_timeout = @config.open_timeout
+      key = "#{uri.host}:#{uri.port}"
+      cache = Thread.current[:graycrm_http_cache] ||= {}
+      http = cache[key]
+
+      unless http
+        http = Net::HTTP.new(uri.host, uri.port)
+        http.use_ssl = true
+        http.read_timeout = @config.timeout
+        http.open_timeout = @config.open_timeout
+        http.keep_alive_timeout = 30
+        cache[key] = http
+      end
+
       http
     end
 

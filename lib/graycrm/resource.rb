@@ -39,6 +39,10 @@ module GrayCRM
         new(data)
       end
 
+      def find_by(filters = {})
+        where(filters).first
+      end
+
       def all
         Relation.new(self)
       end
@@ -87,6 +91,7 @@ module GrayCRM
       @attributes = {}
       @changed_attributes = Set.new
       @_base_path = nil
+      @_last_validation_error = nil
       attrs.each { |k, v| @attributes[k.to_s] = v }
     end
 
@@ -106,7 +111,12 @@ module GrayCRM
       @changed_attributes.any?
     end
 
+    def errors
+      @_last_validation_error&.validation_errors || {}
+    end
+
     def save
+      @_last_validation_error = nil
       perform_save
       @changed_attributes.clear
       self
@@ -152,8 +162,22 @@ module GrayCRM
       @attributes.to_json(*args)
     end
 
+    def to_param
+      id
+    end
+
     def inspect
       "#<#{self.class.name} #{@attributes.map { |k, v| "#{k}: #{v.inspect}" }.join(', ')}>"
+    end
+
+    def ==(other)
+      other.is_a?(self.class) && id == other.id && !id.nil?
+    end
+
+    alias eql? ==
+
+    def hash
+      [self.class, id].hash
     end
 
     private

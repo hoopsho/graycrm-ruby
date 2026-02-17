@@ -23,6 +23,7 @@ GrayCRM.configure do |c|
   c.timeout = 30                  # Read timeout (seconds)
   c.open_timeout = 10             # Connection timeout
   c.per_page = 25                 # Default pagination size
+  c.max_retries = 3               # Auto-retry on 429 rate limit (default: 0)
   c.logger = Logger.new(STDOUT)   # Optional request logging
 end
 ```
@@ -55,6 +56,9 @@ contact = GrayCRM::Contact.create(first_name: "Jane", last_name: "Doe")
 # Get a contact
 contact = GrayCRM::Contact.find("uuid")
 
+# Find by filters
+contact = GrayCRM::Contact.find_by(email_eq: "jane@example.com")
+
 # Update
 contact.update(company: "Acme Inc")
 
@@ -72,6 +76,7 @@ GrayCRM::Contact.where(first_name_cont: "Jane")
 GrayCRM::Contact.where(flag: { key: "enrichment", value: "pending" })
 GrayCRM::Contact.where(tag: "vip,hot-lead")
 GrayCRM::Contact.find("uuid")
+GrayCRM::Contact.find_by(email_eq: "jane@example.com")
 GrayCRM::Contact.create(first_name: "Jane", last_name: "Doe")
 ```
 
@@ -141,7 +146,13 @@ webhook.destroy
 
 ```ruby
 export = GrayCRM::Export.create(resource_type: "Contact")
-export.reload  # Poll for status
+
+# Poll manually
+export.reload
+puts export.download_url if export.completed?
+
+# Or wait automatically
+export.wait_until_complete!(timeout: 120, interval: 2)
 puts export.download_url if export.completed?
 ```
 
@@ -252,7 +263,7 @@ end
 
 ```ruby
 begin
-  GrayCRM::Contact.create(first_name: "")
+  GrayCRM::Contact.create!(first_name: "")
 rescue GrayCRM::ValidationError => e
   puts e.validation_errors  # => { "first_name" => ["can't be blank"] }
 rescue GrayCRM::AuthenticationError
@@ -267,6 +278,15 @@ rescue GrayCRM::RateLimitError => e
   puts "Rate limited, retry after #{e.retry_after} seconds"
 rescue GrayCRM::ServerError
   puts "Server error, try again"
+end
+```
+
+### Validation Errors on Save
+
+```ruby
+contact = GrayCRM::Contact.new("first_name" => "")
+if contact.save == false
+  puts contact.errors  # => { "first_name" => ["can't be blank"] }
 end
 ```
 

@@ -2,7 +2,7 @@
 
 module GrayCRM
   class Configuration
-    attr_accessor :host, :api_key, :timeout, :open_timeout, :logger, :per_page
+    attr_accessor :host, :api_key, :timeout, :open_timeout, :logger, :per_page, :max_retries
 
     def initialize
       @host = nil
@@ -11,6 +11,7 @@ module GrayCRM
       @open_timeout = 10
       @logger = nil
       @per_page = 25
+      @max_retries = 0
     end
 
     def base_url

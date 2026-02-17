@@ -22,5 +22,15 @@ module GrayCRM
     def processing?
       status == "processing"
     end
+
+    def wait_until_complete!(timeout: 120, interval: 2)
+      deadline = Time.now + timeout
+      loop do
+        reload
+        return self if completed? || failed?
+        raise GrayCRM::Error, "Export timed out after #{timeout}s" if Time.now > deadline
+        sleep interval
+      end
+    end
   end
 end

@@ -75,6 +75,30 @@ class GrayCRM::RelationTest < Minitest::Test
     refute_equal base_filters.object_id, filtered_filters.object_id
   end
 
+  # --- per_page not sent when unset ---
+
+  def test_per_page_not_sent_when_unset
+    stub = stub_request(:get, "https://acme.graycrm.io/api/v1/contacts")
+      .with { |req| !req.uri.query&.include?("per_page") }
+      .to_return(
+        status: 200,
+        body: { data: [{ id: "1" }], pagination: {} }.to_json,
+        headers: { "Content-Type" => "application/json" }
+      )
+
+    GrayCRM::Contact.all.to_a
+    assert_requested(stub)
+  end
+
+  def test_per_page_sent_when_explicitly_set
+    stub = stub_api_with_query(:get, "/contacts",
+      query: { "per_page" => "10" },
+      body: { data: [], pagination: {} })
+
+    GrayCRM::Contact.per(10).to_a
+    assert_requested(stub)
+  end
+
   # --- Auto-pagination tests ---
 
   def test_next_page_with_cursor

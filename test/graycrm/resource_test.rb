@@ -144,4 +144,108 @@ class GrayCRM::ResourceTest < Minitest::Test
     error = assert_raises(GrayCRM::ValidationError) { contact.update!(company: "x" * 300) }
     assert_equal({ "company" => ["too long"] }, error.validation_errors)
   end
+
+  # --- errors accessor ---
+
+  def test_errors_returns_empty_hash_by_default
+    contact = GrayCRM::Contact.new("id" => "abc")
+    assert_equal({}, contact.errors)
+  end
+
+  def test_errors_returns_validation_details_after_failed_save
+    stub_api(:patch, "/contacts/abc", status: 422, body: {
+      error: { code: "validation_failed", message: "Invalid", details: { first_name: ["can't be blank"] } }
+    })
+
+    contact = GrayCRM::Contact.new("id" => "abc", "first_name" => "Jane")
+    contact.first_name = ""
+    contact.save
+    assert_equal({ "first_name" => ["can't be blank"] }, contact.errors)
+  end
+
+  def test_errors_cleared_after_successful_save
+    stub_api(:patch, "/contacts/abc", status: 422, body: {
+      error: { code: "validation_failed", message: "Invalid", details: { first_name: ["can't be blank"] } }
+    })
+
+    contact = GrayCRM::Contact.new("id" => "abc", "first_name" => "Jane")
+    contact.first_name = ""
+    contact.save
+
+    # Now stub a successful save
+    stub_api(:patch, "/contacts/abc", body: {
+      data: { id: "abc", first_name: "Janet" }
+    })
+    contact.first_name = "Janet"
+    contact.save
+    assert_equal({}, contact.errors)
+  end
+
+  # --- equality ---
+
+  def test_equality_same_class_same_id
+    a = GrayCRM::Contact.new("id" => "abc", "first_name" => "Jane")
+    b = GrayCRM::Contact.new("id" => "abc", "first_name" => "Janet")
+    assert_equal a, b
+    assert a.eql?(b)
+  end
+
+  def test_equality_different_id
+    a = GrayCRM::Contact.new("id" => "abc")
+    b = GrayCRM::Contact.new("id" => "def")
+    refute_equal a, b
+  end
+
+  def test_equality_nil_id_not_equal
+    a = GrayCRM::Contact.new("first_name" => "Jane")
+    b = GrayCRM::Contact.new("first_name" => "Jane")
+    refute_equal a, b
+  end
+
+  def test_equality_different_class
+    contact = GrayCRM::Contact.new("id" => "abc")
+    property = GrayCRM::Property.new("id" => "abc")
+    refute_equal contact, property
+  end
+
+  def test_hash_same_for_equal_objects
+    a = GrayCRM::Contact.new("id" => "abc")
+    b = GrayCRM::Contact.new("id" => "abc")
+    assert_equal a.hash, b.hash
+
+    # Works in a Set/Hash
+    set = [a, b].uniq
+    assert_equal 1, set.size
+  end
+
+  # --- to_param ---
+
+  def test_to_param_returns_id
+    contact = GrayCRM::Contact.new("id" => "abc-123")
+    assert_equal "abc-123", contact.to_param
+  end
+
+  def test_to_param_returns_nil_for_new_record
+    contact = GrayCRM::Contact.new("first_name" => "Jane")
+    assert_nil contact.to_param
+  end
+
+  # --- find_by ---
+
+  def test_find_by_returns_first_match
+    stub_api(:get, "/contacts",
+      body: { data: [{ id: "abc", first_name: "Jane" }], pagination: { total: 1 } })
+
+    contact = GrayCRM::Contact.find_by(email_eq: "jane@example.com")
+    assert_equal "abc", contact.id
+    assert_equal "Jane", contact.first_name
+  end
+
+  def test_find_by_returns_nil_when_no_match
+    stub_api(:get, "/contacts",
+      body: { data: [], pagination: { total: 0 } })
+
+    result = GrayCRM::Contact.find_by(email_eq: "nobody@example.com")
+    assert_nil result
+  end
 end
