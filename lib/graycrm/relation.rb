@@ -116,6 +116,17 @@ module GrayCRM
       instance = @klass.new(data)
       instance._base_path = @path
       instance
+    rescue ValidationError
+      nil
+    end
+
+    def create!(attrs = {})
+      resource_key = @klass.resource_name
+      response = GrayCRM.client.post(@path, body: { resource_key => attrs })
+      data = response.is_a?(Hash) && response["data"] ? response["data"] : response
+      instance = @klass.new(data)
+      instance._base_path = @path
+      instance
     end
 
     private

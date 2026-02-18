@@ -4,7 +4,7 @@ module GrayCRM
   class Contact < Resource
     self.resource_path = "/contacts"
 
-    attribute :id, :first_name, :last_name, :email, :phone, :company,
+    attribute :id, :first_name, :last_name, :company,
               :source, :source_detail, :created_at, :updated_at
 
     has_many :emails, class_name: "ContactEmail", path: "contact_emails"
@@ -16,6 +16,18 @@ module GrayCRM
     has_many :custom_attributes, class_name: "CustomAttribute"
     has_many :properties, class_name: "ContactProperty", path: "contact_properties"
     has_many :audit_events, class_name: "AuditEvent"
+
+    # Computed from nested resources — primary email/phone take precedence
+    # over the raw API attributes (which may be nil).
+    def email
+      embedded = (@attributes["emails"] || []).find { |e| e["primary"] }
+      embedded&.dig("email") || @attributes["email"]
+    end
+
+    def phone
+      embedded = (@attributes["phones"] || []).find { |p| p["primary"] }
+      embedded&.dig("phone") || @attributes["phone"]
+    end
 
     def merge(loser_id:)
       response = GrayCRM.client.post("#{self.class.resource_path}/#{id}/merge",
